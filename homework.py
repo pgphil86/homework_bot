@@ -7,9 +7,9 @@ import time
 
 from dotenv import load_dotenv
 
-from exception import (
+from exceptions import (
     ApiError,
-    MessageError,
+    # MessageError,
     ParseStatusError,
     ResponseError,
 )
@@ -56,25 +56,27 @@ def check_tokens():
 def send_message(bot, message):
     """Function of sending messages."""
     try:
-        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+        logging.debug(f'Bot sent {message}.')
+        bot.send_message(TELEGRAM_CHAT_ID, message)
     except Exception as error:
-        raise MessageError(f'Error of sending messages {error}.')
-    else:
-        logger.info('Message sent successfully.')
+        logging.error(error)
 
 
 def get_api_answer(timestamp):
     """Function make request to API."""
-    timestamp = timestamp or int(time.time())
+    timestamp = 0 if not timestamp else int(time.time())
     params = {'from_date': timestamp}
-    response = requests.get(
-        ENDPOINT,
-        headers=HEADERS,
-        params=params,
-    )
-    if response.status_code != 200:
-        raise ApiError(f'Not correct status code {response.status_code}.')
-    return response.json()
+    try:
+        response = requests.get(
+            ENDPOINT,
+            headers=HEADERS,
+            params=params,
+        )
+        if response.status_code != 200:
+            raise ApiError(f'Not correct status code {response.status_code}.')
+        return response.json()
+    except Exception as error:
+        raise ApiError(f'Error {error}')
 
 
 def check_response(response):
@@ -90,25 +92,34 @@ def check_response(response):
     if not isinstance(homeworks, list):
         raise TypeError('Another type of homeworks.')
 
-    return response['homeworks']
+    return homeworks
 
 
 def parse_status(homework):
     """Function of extracting of results homework."""
     homework_name = homework.get('homework_name')
     homework_status = homework.get('status')
-    verdict = HOMEWORK_VERDICTS.get(homework_status)
+    # verdict = HOMEWORK_VERDICTS.get(homework_status)
 
     if homework_name is None:
         raise KeyError('Homework without name.')
 
+    if homework_status is None:
+        logger.debug('Status of homework not changes.')
+
     if 'status' not in homework:
         raise ParseStatusError('Homework without status.')
 
-    if homework_status not in HOMEWORK_VERDICTS:
-        raise KeyError('Homework without verdict.')
+    if homework_status in HOMEWORK_VERDICTS:
+        verdict = HOMEWORK_VERDICTS[homework_status]
+        return f'Изменился статус проверки работы "{homework_name}". {verdict}'
+    raise ParseStatusError(
+        f'Неизвестный статус домашней работы {homework_status}.')
 
-    return f'Изменился статус проверки работы "{homework_name}". {verdict}'
+    # if homework_status not in HOMEWORK_VERDICTS:
+    #     raise KeyError(f'Homework without verdict. {homework_status}')
+
+    # return f'Checking of status is change "{homework_name}". {verdict}.'
 
 
 def main():
@@ -139,10 +150,11 @@ def main():
                 send_message(bot, homework_status)
 
         except Exception as error:
-            message = f'Сбой в работе программы: {error}'
+            message = f'Error in app: {error}'
             logging.error(message)
             send_message(bot, message)
-            time.sleep(RETRY_PERIOD)
+            break
+        time.sleep(RETRY_PERIOD)
 
 
 if __name__ == '__main__':
