@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 
 from exceptions import (
     ApiError,
-    # MessageError,
     ParseStatusError,
     ResponseError,
 )
@@ -32,13 +31,10 @@ HOMEWORK_VERDICTS = {
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
-
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
-handler = logging.StreamHandler()
-handler.setFormatter(formatter)
-logger.addHandler(handler)
+logging.basicConfig(
+    format="%(asctime)s - %(levelname)s - %(message)s", level=logging.DEBUG
+)
 
 
 def check_tokens():
@@ -50,21 +46,23 @@ def check_tokens():
                 'Error of environments variables.'
                 f'"{token}"'
             )
+
     return all(env_variables)
 
 
 def send_message(bot, message):
     """Function of sending messages."""
     try:
-        logging.debug(f'Bot sent {message}.')
         bot.send_message(TELEGRAM_CHAT_ID, message)
     except Exception as error:
-        logging.error(error)
+        logger.error(f'Message not sent, {error}.')
+    else:
+        logger.debug(f'Bot sent, {message}.')
 
 
 def get_api_answer(timestamp):
     """Function make request to API."""
-    timestamp = 0 if not timestamp else int(time.time())
+    timestamp = timestamp or int(time.time())
     params = {'from_date': timestamp}
     try:
         response = requests.get(
@@ -72,88 +70,66 @@ def get_api_answer(timestamp):
             headers=HEADERS,
             params=params,
         )
-        if response.status_code != 200:
-            raise ApiError(f'Not correct status code {response.status_code}.')
-        return response.json()
     except Exception as error:
         raise ApiError(f'Error {error}')
+    if response.status_code != 200:
+        raise ApiError(f'Not correct status code {response.status_code}.')
+
+    return response.json()
 
 
 def check_response(response):
     """Function of checking response."""
-    if not response:
+    if not isinstance(response, dict):
+        raise TypeError('Not correct type of response.')
+    elif not response:
         raise ResponseError('Not correct response.')
-
-    if 'homeworks' not in response:
+    elif 'homeworks' not in response:
         raise TypeError('Homeworks not in response.')
-
-    homeworks = response.get('homeworks')
-
-    if not isinstance(homeworks, list):
+    elif not isinstance(response['homeworks'], list):
         raise TypeError('Another type of homeworks.')
 
-    return homeworks
+    return response.get('homeworks')
 
 
 def parse_status(homework):
-    """Function of extracting of results homework."""
+    """Extracting function of results homework."""
     homework_name = homework.get('homework_name')
     homework_status = homework.get('status')
-    # verdict = HOMEWORK_VERDICTS.get(homework_status)
 
     if homework_name is None:
         raise KeyError('Homework without name.')
 
-    if homework_status is None:
-        logger.debug('Status of homework not changes.')
-
-    if 'status' not in homework:
-        raise ParseStatusError('Homework without status.')
-
     if homework_status in HOMEWORK_VERDICTS:
         verdict = HOMEWORK_VERDICTS[homework_status]
         return f'Изменился статус проверки работы "{homework_name}". {verdict}'
-    raise ParseStatusError(
-        f'Неизвестный статус домашней работы {homework_status}.')
-
-    # if homework_status not in HOMEWORK_VERDICTS:
-    #     raise KeyError(f'Homework without verdict. {homework_status}')
-
-    # return f'Checking of status is change "{homework_name}". {verdict}.'
+        # return f'Status of work, "{homework_name}", changed. {verdict}.'
+    raise ParseStatusError(f'Unknown status - {homework_status}.')
 
 
 def main():
     """General logic in work of Bot."""
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
-    response = get_api_answer(timestamp)
-    homeworks = check_response(response)
     if not check_tokens():
         sys.exit()
 
     while True:
         try:
+            response = get_api_answer(timestamp)
+            homeworks = check_response(response)
             count_homeworks = len(homeworks)
-            if response is None:
-                logger.error('API dont send response.')
-                send_message(
-                    bot,
-                    'Function get_api_answer having problem.'
-                )
 
-            if count_homeworks > 1:
+            if count_homeworks > 0:
                 homework_status = parse_status(homeworks[0])
+                send_message(bot, f'{homework_status}')
             else:
-                homework_status = parse_status(homeworks)
-
-            if homework_status:
-                send_message(bot, homework_status)
+                logger.debug('New status not exist.')
 
         except Exception as error:
             message = f'Error in app: {error}'
             logging.error(message)
             send_message(bot, message)
-            break
         time.sleep(RETRY_PERIOD)
 
 
