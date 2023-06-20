@@ -7,7 +7,7 @@ import time
 
 from dotenv import load_dotenv
 
-from exception import (
+from .exception import (
     ApiError,
     ParseStatusError,
     ResponseError,
