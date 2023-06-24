@@ -1,18 +1,14 @@
 import logging
 import os
-import requests
 import sys
-import telegram
 import time
 
+import requests
+import telegram
 from dotenv import load_dotenv
+from requests.exceptions import RequestException
 
-from exceptions import (
-    ApiError,
-    ParseStatusError,
-    ResponseError,
-)
-
+from exceptions import ApiError, ParseStatusError, ResponseError
 
 load_dotenv()
 
@@ -53,8 +49,9 @@ def check_tokens():
 def send_message(bot, message):
     """Function of sending messages."""
     try:
+        logging.info(f'Bot start to send message {message}.')
         bot.send_message(TELEGRAM_CHAT_ID, message)
-    except Exception as error:
+    except telegram.error.TelegramError as error:
         logger.error(f'Message not sent, {error}.')
     else:
         logger.debug(f'Bot sent, {message}.')
@@ -70,7 +67,9 @@ def get_api_answer(timestamp):
             headers=HEADERS,
             params=params,
         )
-    except Exception as error:
+        logging.info(f'Starting request to {ENDPOINT}'
+                     f'with {params} and {HEADERS}.')
+    except RequestException as error:
         raise ApiError(f'Error {error}')
     if response.status_code != 200:
         raise ApiError(f'Not correct status code {response.status_code}.')
@@ -82,11 +81,14 @@ def check_response(response):
     """Function of checking response."""
     if not isinstance(response, dict):
         raise TypeError('Not correct type of response.')
-    elif not response:
+
+    if not response:
         raise ResponseError('Not correct response.')
-    elif 'homeworks' not in response:
+
+    if 'homeworks' not in response:
         raise TypeError('Homeworks not in response.')
-    elif not isinstance(response['homeworks'], list):
+
+    if not isinstance(response['homeworks'], list):
         raise TypeError('Another type of homeworks.')
 
     return response.get('homeworks')
@@ -100,10 +102,16 @@ def parse_status(homework):
     if homework_name is None:
         raise KeyError('Homework without name.')
 
+    if homework_status is None:
+        logger.debug('No new status.')
+
+    if 'status' not in homework:
+        logging.error('No status.')
+        raise ParseStatusError('No status.')
+
     if homework_status in HOMEWORK_VERDICTS:
         verdict = HOMEWORK_VERDICTS[homework_status]
         return f'Изменился статус проверки работы "{homework_name}". {verdict}'
-        # return f'Status of work, "{homework_name}", changed. {verdict}.'
     raise ParseStatusError(f'Unknown status - {homework_status}.')
 
 
@@ -112,15 +120,14 @@ def main():
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
     if not check_tokens():
-        sys.exit()
+        sys.exit(1)
 
     while True:
         try:
             response = get_api_answer(timestamp)
             homeworks = check_response(response)
-            count_homeworks = len(homeworks)
 
-            if count_homeworks > 0:
+            if homeworks:
                 homework_status = parse_status(homeworks[0])
                 send_message(bot, f'{homework_status}')
             else:
@@ -130,7 +137,8 @@ def main():
             message = f'Error in app: {error}'
             logging.error(message)
             send_message(bot, message)
-        time.sleep(RETRY_PERIOD)
+        finally:
+            time.sleep(RETRY_PERIOD)
 
 
 if __name__ == '__main__':

@@ -1,17 +1,5 @@
-class MessageError(Exception):
-    """Bot can't send messages."""
-
-    pass
-
-
 class ApiError(Exception):
     """Not correct answer from API."""
-
-    pass
-
-
-class EnvironmentError(Exception):
-    """Error of environment objects."""
 
     pass
 
