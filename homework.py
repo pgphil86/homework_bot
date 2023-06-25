@@ -48,12 +48,12 @@ def check_tokens():
 
 def send_message(bot, message):
     """Function of sending messages."""
+    logging.info(f'Bot start to send message {message}.')
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
     except telegram.error.TelegramError as error:
         logger.error(f'Message not sent, {error}.')
     else:
-        logging.info(f'Bot start to send message {message}.')
         logger.debug(f'Bot sent, {message}.')
 
 
@@ -61,6 +61,8 @@ def get_api_answer(timestamp):
     """Function make request to API."""
     timestamp = timestamp or int(time.time())
     params = {'from_date': timestamp}
+    logging.info(f'Starting request to {ENDPOINT}'
+                 f'with {params} and {HEADERS}.')
     try:
         response = requests.get(
             ENDPOINT,
@@ -69,9 +71,6 @@ def get_api_answer(timestamp):
         )
     except RequestException as error:
         raise ApiError(f'Error {error}')
-    else:
-        logging.info(f'Starting request to {ENDPOINT}'
-                     f'with {params} and {HEADERS}.')
     if response.status_code != 200:
         raise ApiError(f'Not correct status code {response.status_code}.')
 
