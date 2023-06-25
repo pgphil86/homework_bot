@@ -49,11 +49,11 @@ def check_tokens():
 def send_message(bot, message):
     """Function of sending messages."""
     try:
-        logging.info(f'Bot start to send message {message}.')
         bot.send_message(TELEGRAM_CHAT_ID, message)
     except telegram.error.TelegramError as error:
         logger.error(f'Message not sent, {error}.')
     else:
+        logging.info(f'Bot start to send message {message}.')
         logger.debug(f'Bot sent, {message}.')
 
 
@@ -67,10 +67,11 @@ def get_api_answer(timestamp):
             headers=HEADERS,
             params=params,
         )
-        logging.info(f'Starting request to {ENDPOINT}'
-                     f'with {params} and {HEADERS}.')
     except RequestException as error:
         raise ApiError(f'Error {error}')
+    else:
+        logging.info(f'Starting request to {ENDPOINT}'
+                     f'with {params} and {HEADERS}.')
     if response.status_code != 200:
         raise ApiError(f'Not correct status code {response.status_code}.')
 
@@ -79,11 +80,11 @@ def get_api_answer(timestamp):
 
 def check_response(response):
     """Function of checking response."""
-    if not isinstance(response, dict):
-        raise TypeError('Not correct type of response.')
-
     if not response:
         raise ResponseError('Not correct response.')
+
+    if not isinstance(response, dict):
+        raise TypeError('Not correct type of response.')
 
     if 'homeworks' not in response:
         raise TypeError('Homeworks not in response.')
